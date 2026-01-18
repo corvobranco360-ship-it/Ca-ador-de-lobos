@@ -996,13 +996,37 @@ const GameLogic: React.FC = () => {
 
   const drawUI = (ctx: CanvasRenderingContext2D) => {
     if (state.current.status === GameStatus.MENU) {
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      // Overlay
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.8)'; // Dark blue-ish overlay
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-      ctx.fillStyle = '#22c55e'; ctx.font = '40px "Press Start 2P"'; ctx.textAlign = 'center';
-      ctx.fillText('JUNGLE SURVIVAL', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 - 40);
-      ctx.fillStyle = '#fff'; ctx.font = '16px "Press Start 2P"';
-      ctx.fillText('OBJECTIVE: HUNT WOLVES TO UNLOCK THE DOOR', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 20);
-      ctx.fillText('PRESS SPACE OR TAP TO START', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 60);
+
+      ctx.textAlign = 'center';
+
+      // "WOOLF"
+      ctx.font = '72px "Press Start 2P"';
+      ctx.lineWidth = 8;
+      ctx.strokeStyle = '#000';
+      ctx.strokeText('WOOLF', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 - 80);
+      ctx.fillStyle = '#9ca3af'; // Grey/Silver
+      ctx.fillText('WOOLF', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 - 80);
+
+      // "HUNTERS"
+      ctx.font = '72px "Press Start 2P"';
+      ctx.strokeText('HUNTERS', CANVAS_WIDTH/2, CANVAS_HEIGHT/2);
+      ctx.fillStyle = '#ef4444'; // Red
+      ctx.fillText('HUNTERS', CANVAS_WIDTH/2, CANVAS_HEIGHT/2);
+
+      // Credits
+      ctx.font = '14px "Press Start 2P"';
+      ctx.fillStyle = '#cbd5e1';
+      ctx.fillText('criado por corvobranco360🐺', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 60);
+
+      // Instructions
+      if (Math.floor(engine.current.frameCount / 30) % 2 === 0) {
+          ctx.font = '24px "Press Start 2P"';
+          ctx.fillStyle = '#fbbf24'; // Amber
+          ctx.fillText('PRESS SPACE OR TAP', CANVAS_WIDTH/2, CANVAS_HEIGHT - 80);
+      }
       return;
     }
 
