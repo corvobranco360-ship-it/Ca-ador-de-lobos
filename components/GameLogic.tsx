@@ -23,11 +23,11 @@ const CANVAS_HEIGHT = 540;
 // UI CONSTANTS
 const TRAP_BTN_X = CANVAS_WIDTH - 80;
 const TRAP_BTN_Y = CANVAS_HEIGHT - 140;
-const TRAP_BTN_RADIUS = 35;
+const TRAP_BTN_RADIUS = 45; // Increased for better touch
 
 const GameLogic: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const requestRef = useRef<number>();
+  const requestRef = useRef<number>(0);
 
   // --- STATE CONTAINERS ---
   const state = useRef<GameState>({
@@ -121,7 +121,6 @@ const GameLogic: React.FC = () => {
       maxHealth: 100,
       aimAngle: 0,
       isAiming: false,
-      drawTimer: 0,
       trapCooldown: 0,
       animTimer: 0
     };
@@ -522,8 +521,7 @@ const GameLogic: React.FC = () => {
           rotation: 0,
           grounded: false,
           markedForDeletion: false,
-          state: 'FLYING',
-          timer: 0
+          state: 'FLYING'
       });
   };
 
@@ -1171,6 +1169,7 @@ const GameLogic: React.FC = () => {
       width={CANVAS_WIDTH} 
       height={CANVAS_HEIGHT} 
       className="w-full h-full object-contain bg-black cursor-crosshair"
+      style={{ touchAction: 'none' }}
     />
   );
 };
