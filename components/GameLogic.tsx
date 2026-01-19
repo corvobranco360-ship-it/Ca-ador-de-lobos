@@ -21,12 +21,22 @@ const CANVAS_WIDTH = 960;
 const CANVAS_HEIGHT = 540;
 const LAKE_LEVEL_Y = CANVAS_HEIGHT - 32;
 
-// UI CONSTANTS
-const TRAP_BTN_X = CANVAS_WIDTH - 80;
-const TRAP_BTN_Y = CANVAS_HEIGHT - 140;
-const TRAP_BTN_RADIUS = 45; 
-const WHISTLE_BTN_X = CANVAS_WIDTH - 180;
-const WHISTLE_BTN_Y = CANVAS_HEIGHT - 80;
+// --- UI CONSTANTS (CONTROLS) ---
+// Joysticks
+const LEFT_STICK_X = 120;
+const LEFT_STICK_Y = CANVAS_HEIGHT - 80;
+const RIGHT_STICK_X = CANVAS_WIDTH - 120;
+const RIGHT_STICK_Y = CANVAS_HEIGHT - 80;
+const JOYSTICK_RADIUS = 50;
+const JOYSTICK_HIT_RADIUS = 80; // Larger area to catch the finger
+
+// Action Buttons (Moved Up to avoid conflict with Right Stick)
+const TRAP_BTN_X = CANVAS_WIDTH - 60;
+const TRAP_BTN_Y = CANVAS_HEIGHT - 220; 
+const TRAP_BTN_RADIUS = 40; 
+
+const WHISTLE_BTN_X = CANVAS_WIDTH - 150;
+const WHISTLE_BTN_Y = CANVAS_HEIGHT - 220;
 const WHISTLE_BTN_RADIUS = 35;
 
 const GameLogic: React.FC = () => {
@@ -65,8 +75,8 @@ const GameLogic: React.FC = () => {
     keys: new Set<string>(),
     mouse: { x: 0, y: 0, leftDown: false },
     touch: {
-      leftStick: { active: false, x: 0, y: 0, originX: 0, originY: 0 },
-      rightStick: { active: false, x: 0, y: 0, originX: 0, originY: 0 },
+      leftStick: { active: false, x: 0, y: 0, touchId: null as number | null },
+      rightStick: { active: false, x: 0, y: 0, touchId: null as number | null },
       trapBtnPressed: false,
       whistleBtnPressed: false
     }
@@ -1433,35 +1443,66 @@ const GameLogic: React.FC = () => {
   };
 
   const drawMobileControls = (ctx: CanvasRenderingContext2D) => {
-    const ls = input.current.touch.leftStick;
-    if (ls.active) {
-      ctx.save();
-      ctx.translate(ls.originX, ls.originY);
-      ctx.beginPath(); ctx.arc(0, 0, 40, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.1)'; ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)'; ctx.lineWidth = 2;
-      ctx.fill(); ctx.stroke();
-      const dist = Math.min(40, Math.sqrt(ls.x * ls.x + ls.y * ls.y));
-      const angle = Math.atan2(ls.y, ls.x);
-      ctx.beginPath(); ctx.arc(Math.cos(angle)*dist, Math.sin(angle)*dist, 20, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(34, 197, 94, 0.6)'; ctx.fill();
-      ctx.restore();
-    }
+    // DRAW FIXED JOYSTICKS ALWAYS
 
-    const rs = input.current.touch.rightStick;
-    if (rs.active) {
-      ctx.save();
-      ctx.translate(rs.originX, rs.originY);
-      ctx.beginPath(); ctx.arc(0, 0, 40, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.1)'; ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)'; ctx.lineWidth = 2;
-      ctx.fill(); ctx.stroke();
-      const dist = Math.min(40, Math.sqrt(rs.x * rs.x + rs.y * rs.y));
-      const angle = Math.atan2(rs.y, rs.x);
-      ctx.beginPath(); ctx.arc(Math.cos(angle)*dist, Math.sin(angle)*dist, 20, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(250, 204, 21, 0.6)'; ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.font = '10px monospace'; ctx.textAlign = 'center';
-      ctx.fillText('RELEASE', 0, -50);
-      ctx.restore();
+    // LEFT STICK
+    const ls = input.current.touch.leftStick;
+    ctx.save();
+    ctx.translate(LEFT_STICK_X, LEFT_STICK_Y);
+    ctx.beginPath(); ctx.arc(0, 0, JOYSTICK_RADIUS, 0, Math.PI * 2);
+    ctx.fillStyle = ls.active ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.1)'; 
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)'; ctx.lineWidth = 2;
+    ctx.fill(); ctx.stroke();
+    
+    // Knob position
+    let knobX = 0, knobY = 0;
+    if (ls.active) {
+        knobX = ls.x;
+        knobY = ls.y;
+        // Clamp to radius for visual only
+        const dist = Math.sqrt(knobX*knobX + knobY*knobY);
+        if (dist > JOYSTICK_RADIUS) {
+            const angle = Math.atan2(knobY, knobX);
+            knobX = Math.cos(angle) * JOYSTICK_RADIUS;
+            knobY = Math.sin(angle) * JOYSTICK_RADIUS;
+        }
     }
+    ctx.beginPath(); ctx.arc(knobX, knobY, 20, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(34, 197, 94, 0.6)'; ctx.fill();
+    if (!ls.active) {
+        ctx.fillStyle = '#fff'; ctx.font = '10px monospace'; ctx.textAlign = 'center'; ctx.fillText('MOVE', 0, 4);
+    }
+    ctx.restore();
+
+    // RIGHT STICK
+    const rs = input.current.touch.rightStick;
+    ctx.save();
+    ctx.translate(RIGHT_STICK_X, RIGHT_STICK_Y);
+    ctx.beginPath(); ctx.arc(0, 0, JOYSTICK_RADIUS, 0, Math.PI * 2);
+    ctx.fillStyle = rs.active ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.1)'; 
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)'; ctx.lineWidth = 2;
+    ctx.fill(); ctx.stroke();
+
+    // Knob position
+    knobX = 0; knobY = 0;
+    if (rs.active) {
+        knobX = rs.x;
+        knobY = rs.y;
+        const dist = Math.sqrt(knobX*knobX + knobY*knobY);
+        if (dist > JOYSTICK_RADIUS) {
+            const angle = Math.atan2(knobY, knobX);
+            knobX = Math.cos(angle) * JOYSTICK_RADIUS;
+            knobY = Math.sin(angle) * JOYSTICK_RADIUS;
+        }
+    }
+    ctx.beginPath(); ctx.arc(knobX, knobY, 20, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(250, 204, 21, 0.6)'; ctx.fill();
+    if (!rs.active) {
+        ctx.fillStyle = '#fff'; ctx.font = '10px monospace'; ctx.textAlign = 'center'; ctx.fillText('AIM', 0, 4);
+    } else {
+        ctx.fillStyle = '#fff'; ctx.font = '10px monospace'; ctx.textAlign = 'center'; ctx.fillText('RELEASE', 0, -60);
+    }
+    ctx.restore();
 
     const player = entities.current.player;
     if (player) {
@@ -1616,15 +1657,36 @@ const GameLogic: React.FC = () => {
       const r = canvasRef.current?.getBoundingClientRect();
       if (!r) return;
       if (state.current.status !== GameStatus.PLAYING) { initGame(); return; }
+      
       Array.from(e.changedTouches).forEach(t => {
         const x = (t.clientX - r.left) * (CANVAS_WIDTH / r.width);
         const y = (t.clientY - r.top) * (CANVAS_HEIGHT / r.height);
+        
+        // CHECK BUTTONS FIRST
         const distTrap = Math.sqrt(Math.pow(x - TRAP_BTN_X, 2) + Math.pow(y - TRAP_BTN_Y, 2));
         if (distTrap < TRAP_BTN_RADIUS) { input.current.touch.trapBtnPressed = true; return; }
+        
         const distWhistle = Math.sqrt(Math.pow(x - WHISTLE_BTN_X, 2) + Math.pow(y - WHISTLE_BTN_Y, 2));
         if (distWhistle < WHISTLE_BTN_RADIUS) { input.current.touch.whistleBtnPressed = true; return; }
-        if (x < CANVAS_WIDTH / 2) { input.current.touch.leftStick = { active: true, x: 0, y: 0, originX: x, originY: y }; } 
-        else { input.current.touch.rightStick = { active: true, x: 0, y: 0, originX: x, originY: y }; }
+
+        // CHECK FIXED JOYSTICKS
+        const distLeft = Math.sqrt(Math.pow(x - LEFT_STICK_X, 2) + Math.pow(y - LEFT_STICK_Y, 2));
+        if (distLeft < JOYSTICK_HIT_RADIUS) {
+            input.current.touch.leftStick.active = true;
+            input.current.touch.leftStick.touchId = t.identifier;
+            input.current.touch.leftStick.x = x - LEFT_STICK_X;
+            input.current.touch.leftStick.y = y - LEFT_STICK_Y;
+            return;
+        }
+
+        const distRight = Math.sqrt(Math.pow(x - RIGHT_STICK_X, 2) + Math.pow(y - RIGHT_STICK_Y, 2));
+        if (distRight < JOYSTICK_HIT_RADIUS) {
+            input.current.touch.rightStick.active = true;
+            input.current.touch.rightStick.touchId = t.identifier;
+            input.current.touch.rightStick.x = x - RIGHT_STICK_X;
+            input.current.touch.rightStick.y = y - RIGHT_STICK_Y;
+            return;
+        }
       });
     };
 
@@ -1632,27 +1694,43 @@ const GameLogic: React.FC = () => {
       e.preventDefault();
       const r = canvasRef.current?.getBoundingClientRect();
       if (!r) return;
+      
       Array.from(e.changedTouches).forEach(t => {
         const x = (t.clientX - r.left) * (CANVAS_WIDTH / r.width);
         const y = (t.clientY - r.top) * (CANVAS_HEIGHT / r.height);
+        
         const ls = input.current.touch.leftStick;
+        if (ls.active && ls.touchId === t.identifier) {
+            ls.x = x - LEFT_STICK_X;
+            ls.y = y - LEFT_STICK_Y;
+        }
+
         const rs = input.current.touch.rightStick;
-        if (ls.active && x < CANVAS_WIDTH / 2) { ls.x = x - ls.originX; ls.y = y - ls.originY; }
-        if (rs.active && x > CANVAS_WIDTH / 2) { rs.x = x - rs.originX; rs.y = y - rs.originY; }
+        if (rs.active && rs.touchId === t.identifier) {
+            rs.x = x - RIGHT_STICK_X;
+            rs.y = y - RIGHT_STICK_Y;
+        }
       });
     };
 
     const onTouchEnd = (e: TouchEvent) => {
       e.preventDefault();
-      const r = canvasRef.current?.getBoundingClientRect();
-      if (!r) return;
       Array.from(e.changedTouches).forEach(t => {
-        const x = (t.clientX - r.left) * (CANVAS_WIDTH / r.width);
-        if (input.current.touch.rightStick.active && x >= CANVAS_WIDTH / 2) {
-           input.current.touch.rightStick.active = false;
-           if (entities.current.player && entities.current.player.health > 0) fireArrow(entities.current.player);
+        const ls = input.current.touch.leftStick;
+        if (ls.active && ls.touchId === t.identifier) {
+            ls.active = false;
+            ls.touchId = null;
+            ls.x = 0; ls.y = 0;
         }
-        if (x < CANVAS_WIDTH / 2) input.current.touch.leftStick.active = false;
+
+        const rs = input.current.touch.rightStick;
+        if (rs.active && rs.touchId === t.identifier) {
+            rs.active = false;
+            rs.touchId = null;
+            rs.x = 0; rs.y = 0;
+            // Fire arrow on release
+            if (entities.current.player && entities.current.player.health > 0) fireArrow(entities.current.player);
+        }
       });
     };
 
