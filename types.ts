@@ -4,17 +4,21 @@ export enum EntityType {
   PLAYER,
   ENEMY,
   ARROW,
-  TRAP, // Represents the Net Projectile
+  TRAP,
   PARTICLE,
   PLATFORM,
   DOOR,
-  FLOATING_TEXT
+  FLOATING_TEXT,
+  DOG,
+  CAGE,
+  DUCK, // New
+  MEAT  // New
 }
 
 export enum EnemyTier {
-  SMALL = 'SMALL',   // Wolf Pup / Fast
-  MEDIUM = 'MEDIUM', // Regular Wolf
-  LARGE = 'LARGE'    // Alpha Wolf
+  SMALL = 'SMALL',   
+  MEDIUM = 'MEDIUM', 
+  LARGE = 'LARGE'    
 }
 
 export interface Entity {
@@ -39,6 +43,25 @@ export interface DoorEntity extends Entity {
   isOpen: boolean;
 }
 
+export interface CageEntity extends Entity {
+  type: EntityType.CAGE;
+  health: number;
+}
+
+export interface MeatEntity extends Entity {
+  type: EntityType.MEAT;
+  value: number;
+}
+
+export interface DuckEntity extends Entity {
+  type: EntityType.DUCK;
+  state: 'SWIM' | 'FLY' | 'FALL' | 'DEAD' | 'CARRIED';
+  facingRight: boolean;
+  flightTimer: number; // How long to stay in air
+  flapTimer: number;   // Animation
+  color: string;
+}
+
 export interface PlayerEntity extends Entity {
   type: EntityType.PLAYER;
   facingRight: boolean;
@@ -50,12 +73,23 @@ export interface PlayerEntity extends Entity {
   animTimer: number;
 }
 
+export interface DogEntity extends Entity {
+  type: EntityType.DOG;
+  facingRight: boolean;
+  state: 'IDLE' | 'FOLLOW' | 'CHASE' | 'ATTACK' | 'BRAWL' | 'RETRIEVE'; // Added RETRIEVE
+  target: Entity | null;
+  barkTimer: number;
+  tongueOut: boolean;
+  animTimer: number;
+  aggroTimer: number; 
+}
+
 export interface EnemyEntity extends Entity {
   type: EntityType.ENEMY;
   tier: EnemyTier;
   health: number;
   maxHealth: number;
-  stunTimer: number; // Used for Net capture
+  stunTimer: number; 
   color: string;
 }
 
@@ -66,7 +100,7 @@ export interface ArrowEntity extends Entity {
 }
 
 export interface TrapEntity extends Entity {
-  type: EntityType.TRAP; // The Net Projectile
+  type: EntityType.TRAP; 
   rotation: number;
   state: 'FLYING' | 'STUCK'; 
 }
