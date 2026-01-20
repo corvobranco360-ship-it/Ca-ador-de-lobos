@@ -11,8 +11,12 @@ export enum EntityType {
   FLOATING_TEXT,
   DOG,
   CAGE,
-  DUCK, // New
-  MEAT  // New
+  DUCK,
+  MEAT,
+  POWERUP,
+  CROW,
+  BUSH,   // New
+  RABBIT  // New
 }
 
 export enum EnemyTier {
@@ -53,13 +57,55 @@ export interface MeatEntity extends Entity {
   value: number;
 }
 
+export interface PowerUpEntity extends Entity {
+  type: EntityType.POWERUP;
+  kind: 'TRIPLE_SHOT';
+  timer: number;
+}
+
+export interface FloatingTextEntity extends Entity {
+  type: EntityType.FLOATING_TEXT;
+  text: string;
+  color: string;
+  lifeTime: number;
+  opacity: number;
+}
+
 export interface DuckEntity extends Entity {
   type: EntityType.DUCK;
   state: 'SWIM' | 'FLY' | 'FALL' | 'DEAD' | 'CARRIED';
   facingRight: boolean;
-  flightTimer: number; // How long to stay in air
-  flapTimer: number;   // Animation
+  flightTimer: number;
+  flapTimer: number;
   color: string;
+}
+
+// Crow Entity Interface
+export interface CrowEntity extends Entity {
+  type: EntityType.CROW;
+  state: 'FLY' | 'DIVE' | 'RETURN';
+  startX: number;
+  startY: number;
+  diveTimer: number;
+  facingRight: boolean;
+  health: number;
+  color: string;
+}
+
+// RPG Hunting Entities
+export interface BushEntity extends Entity {
+  type: EntityType.BUSH;
+  hasRabbit: boolean;
+  shakeTimer: number;
+}
+
+export interface RabbitEntity extends Entity {
+  type: EntityType.RABBIT;
+  state: 'HIDDEN' | 'IDLE' | 'FLEE' | 'CAUGHT' | 'DEAD';
+  isHidden: boolean;
+  facingRight: boolean;
+  fleeTimer: number;
+  health: number;
 }
 
 export interface PlayerEntity extends Entity {
@@ -67,21 +113,28 @@ export interface PlayerEntity extends Entity {
   facingRight: boolean;
   health: number;
   maxHealth: number;
-  aimAngle: number; // In radians
-  isAiming: boolean; // True when holding touch
+  aimAngle: number;
+  isAiming: boolean;
   trapCooldown: number;
   animTimer: number;
+  powerUpTimer: number;
+  // Dash mechanics
+  dashTimer: number;       // Cooldown
+  isDashing: boolean;      // Currently dashing?
+  invulnerableTimer: number; // I-frames
 }
 
 export interface DogEntity extends Entity {
   type: EntityType.DOG;
   facingRight: boolean;
-  state: 'IDLE' | 'FOLLOW' | 'CHASE' | 'ATTACK' | 'BRAWL' | 'RETRIEVE'; // Added RETRIEVE
+  // Added CARRY state for retrieving rabbits
+  state: 'IDLE' | 'FOLLOW' | 'CHASE' | 'ATTACK' | 'BRAWL' | 'RETRIEVE' | 'HEAL' | 'POINTING' | 'FLUSH' | 'CARRY'; 
   target: Entity | null;
   barkTimer: number;
   tongueOut: boolean;
   animTimer: number;
-  aggroTimer: number; 
+  aggroTimer: number;
+  healTimer: number; 
 }
 
 export interface EnemyEntity extends Entity {
@@ -124,8 +177,11 @@ export interface GameState {
   status: GameStatus;
   level: number;
   score: number;
+  lives: number; 
   waveProgress: number;
   maxWaves: number;
   enemiesKilled: number;
   enemiesRequired: number;
+  isRaining: boolean; 
+  lightningTimer: number; 
 }
