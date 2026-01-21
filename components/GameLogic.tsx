@@ -356,6 +356,7 @@ const GameLogic: React.FC = () => {
     let vx = 0; 
     let vy = 0;
     
+    // Check if aiming via stick/mouse, OR just fire in facing direction
     if (player.isAiming || input.current.mouse.leftDown || input.current.touch.rightStick.active) {
         vx = Math.cos(player.aimAngle) * speed;
         vy = Math.sin(player.aimAngle) * speed;
@@ -369,7 +370,7 @@ const GameLogic: React.FC = () => {
         type: EntityType.ARROW,
         x: player.x + player.width / 2,
         y: player.y + player.height / 2,
-        width: 16, height: 4,
+        width: 24, height: 6, // Larger arrows for visibility
         vx, vy,
         grounded: false, markedForDeletion: false,
         rotation: Math.atan2(vy, vx),
@@ -437,9 +438,17 @@ const GameLogic: React.FC = () => {
     
     const mx = input.current.mouse.x;
     const my = input.current.mouse.y;
+    // Mouse aiming
     if (input.current.mouse.x !== 0 || input.current.mouse.y !== 0 && !input.current.touch.rightStick.active) {
         player.aimAngle = Math.atan2(my - (player.y + 15), mx - (player.x + 12));
     }
+    // Touch aiming logic
+    if (input.current.touch.rightStick.active) {
+        player.isAiming = true;
+        // Auto-fire when using right stick (Twin Stick style)
+        shootCommand = true;
+    }
+
     if (input.current.mouse.leftDown) shootCommand = true;
 
     const { leftStick, rightStick, trapBtnPressed, whistleBtnPressed, dashBtnPressed } = input.current.touch;
@@ -455,12 +464,11 @@ const GameLogic: React.FC = () => {
           if (leftStick.y < -30) jump = true;
       }
     }
+    
+    // Set aim angle from stick
     if (rightStick.active) {
       player.aimAngle = Math.atan2(rightStick.y, rightStick.x);
-      player.isAiming = true;
-    } else {
-      player.isAiming = false;
-    }
+    } 
 
     if (isTopDown()) updateRPGPhysics(player, dx, dy, dash, whistle);
     else updatePlatformerPhysics(player, dx, jump, dash);
@@ -474,11 +482,11 @@ const GameLogic: React.FC = () => {
 
     if (player.powerUpTimer > 0) player.powerUpTimer--;
 
+    // SHOOTING LOGIC
     if (shootCommand) {
-        if (player.powerUpTimer > 0) {
-            if (engine.current.frameCount % 10 === 0) fireArrow(player);
-        } else {
-            if (engine.current.frameCount % 20 === 0) fireArrow(player);
+        const fireRate = player.powerUpTimer > 0 ? 10 : 20;
+        if (engine.current.frameCount % fireRate === 0) {
+            fireArrow(player);
         }
     }
 
@@ -923,9 +931,9 @@ const GameLogic: React.FC = () => {
   const updateEnemies = (player: PlayerEntity) => {
       if (engine.current.frameCount % (60 * (3 - Math.min(2, state.current.level * 0.5))) === 0 && entities.current.enemies.length < 5 && state.current.level !== 3) {
           const tier = Math.random() < 0.3 ? EnemyTier.LARGE : (Math.random() < 0.5 ? EnemyTier.MEDIUM : EnemyTier.SMALL);
-          let width = 36, height = 20, health = 2, color = '#ef4444';
-          if (tier === EnemyTier.MEDIUM) { width = 48; height = 28; health = 4; color = '#b91c1c'; }
-          if (tier === EnemyTier.LARGE) { width = 60; height = 36; health = 8; color = '#7f1d1d'; }
+          let width = 36, height = 24, health = 2, color = '#9ca3af';
+          if (tier === EnemyTier.MEDIUM) { width = 44; height = 28; health = 4; color = '#4b5563'; }
+          if (tier === EnemyTier.LARGE) { width = 56; height = 36; health = 8; color = '#1f2937'; }
 
           entities.current.enemies.push({
               id: Math.random(), type: EntityType.ENEMY, tier, x: Math.random() > 0.5 ? -50 : CANVAS_WIDTH + 50, y: Math.random() * (CANVAS_HEIGHT - 100), width, height, vx: 0, vy: 0, grounded: false, markedForDeletion: false, health, maxHealth: health, stunTimer: 0, color
@@ -1069,22 +1077,35 @@ const GameLogic: React.FC = () => {
       ctx.save();
       ctx.translate(d.x + d.width/2, d.y + d.height/2);
       if (!d.facingRight) ctx.scale(-1, 1);
-      const runCycle = (Math.abs(d.vx) > 0.1 || Math.abs(d.vy) > 0.1) ? Math.sin(engine.current.frameCount * 0.5) * 5 : 0;
-      if (d.aggroTimer > 0 || d.state === 'POINTING') { ctx.shadowBlur = 10; ctx.shadowColor = d.state === 'POINTING' ? '#fbbf24' : '#ef4444'; }
+      
+      const cycle = (Math.abs(d.vx) > 0.1 || Math.abs(d.vy) > 0.1) ? Math.sin(engine.current.frameCount * 0.5) * 5 : 0;
+      
+      // -- CHUNKY DOG PIXEL ART --
+      ctx.fillStyle = '#d97706'; // Base Orange
+      // Body
+      ctx.fillRect(-12, -6, 24, 12);
+      // Head
+      ctx.fillRect(8, -12, 12, 12);
+      // Snout
+      ctx.fillRect(18, -8, 6, 6);
+      // Nose
+      ctx.fillStyle = '#000';
+      ctx.fillRect(22, -8, 2, 2);
+      // Ears
+      ctx.fillStyle = '#92400e';
+      ctx.fillRect(10, -14, 4, 4);
+      
+      // Legs
+      ctx.fillStyle = '#b45309';
+      ctx.fillRect(-10 + cycle, 6, 4, 8); // Back
+      ctx.fillRect(10 - cycle, 6, 4, 8); // Front
+
+      // Tail
       ctx.fillStyle = '#d97706';
-      ctx.fillRect(-12 + runCycle, 8, 4, 8); ctx.fillRect(-4 - runCycle, 8, 4, 8); ctx.fillRect(4 + runCycle, 8, 4, 8); ctx.fillRect(10 - runCycle, 8, 4, 8);
-      ctx.fillRect(-14, -4, 28, 12);
-      const wag = Math.sin(engine.current.frameCount * (d.state === 'POINTING' ? 0 : 0.4)) * 5;
-      if (d.state === 'POINTING') ctx.fillRect(-20, -4, 8, 4); else ctx.fillRect(-16, -6, 4, 8 + wag);
-      ctx.fillStyle = d.state === 'BRAWL' ? '#b45309' : '#d97706';
-      if (d.state === 'POINTING') {
-          ctx.fillRect(8, -4, 14, 12); ctx.fillStyle = '#92400e'; ctx.fillRect(10, -2, 4, 8); ctx.fillStyle = '#ef4444'; ctx.fillRect(8, 6, 6, 4); ctx.fillStyle = '#000'; ctx.fillRect(20, 2, 4, 4); 
-      } else {
-          ctx.fillRect(8, -12, 14, 12); ctx.fillStyle = '#92400e'; ctx.fillRect(10, -10, 4, 8); ctx.fillStyle = '#ef4444'; ctx.fillRect(8, -2, 6, 4); ctx.fillStyle = '#000'; ctx.fillRect(20, -6, 4, 4); 
-      }
-      if (d.state === 'CARRY') { ctx.fillStyle = '#fff'; ctx.fillRect(18, -4, 12, 8); ctx.fillStyle = '#fca5a5'; ctx.fillRect(24, -8, 2, 6); }
-      if (d.state === 'HEAL') { ctx.fillStyle = '#f43f5e'; const heartScale = Math.sin(engine.current.frameCount * 0.2) * 2; ctx.fillRect(-2, -20 - heartScale, 4, 4); }
-      ctx.shadowBlur = 0;
+      const wag = Math.sin(engine.current.frameCount * 0.5) * 5;
+      ctx.fillRect(-16, -8 + wag, 4, 8);
+
+      if (d.state === 'CARRY') { ctx.fillStyle = '#fff'; ctx.fillRect(18, -4, 10, 8); }
       ctx.restore();
   };
 
@@ -1167,24 +1188,28 @@ const GameLogic: React.FC = () => {
         ctx.beginPath(); ctx.moveTo(-8, -8); ctx.lineTo(8, 8); ctx.moveTo(8, -8); ctx.lineTo(-8, 8); ctx.strokeRect(-8, -8, 16, 16); ctx.restore();
     });
 
-    // DRAW ARROWS (Improved Visuals)
+    // DRAW ARROWS (VISIBLE)
     entities.current.arrows.forEach(a => {
         ctx.save();
         ctx.translate(a.x, a.y);
         ctx.rotate(a.rotation);
+        
+        // Outline
+        ctx.fillStyle = '#000';
+        ctx.fillRect(-10, -3, 20, 6);
+        
         // Shaft
-        ctx.fillStyle = '#854d0e'; // Wood
+        ctx.fillStyle = '#fbbf24'; // Bright yellow for visibility
         ctx.fillRect(-8, -1, 16, 2);
+        
         // Tip
-        ctx.fillStyle = '#94a3b8'; // Metal
-        ctx.beginPath(); ctx.moveTo(8, -2); ctx.lineTo(12, 0); ctx.lineTo(8, 2); ctx.fill();
-        // Fletching
-        ctx.fillStyle = '#f8fafc'; // White
-        ctx.beginPath(); ctx.moveTo(-8, 0); ctx.lineTo(-12, -3); ctx.lineTo(-10, 0); ctx.lineTo(-12, 3); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.moveTo(8, -3); ctx.lineTo(14, 0); ctx.lineTo(8, 3); ctx.fill();
+        
         ctx.restore();
     });
 
-    // --- DRAW ENEMIES (TRUE PIXEL ART WOLF) ---
+    // --- DRAW ENEMIES (WOLVES - SOLID CHUNKY STYLE) ---
     entities.current.enemies.forEach(e => {
         ctx.save();
         ctx.translate(e.x + e.width/2, e.y + e.height/2);
@@ -1194,117 +1219,84 @@ const GameLogic: React.FC = () => {
         const cycle = Math.sin(engine.current.frameCount * 0.3) * 5;
         const color = e.stunTimer > 0 ? '#facc15' : e.color;
         
+        // Outline
+        // ctx.fillStyle = '#000';
+        // ctx.fillRect(-e.width/2 - 2, -e.height/2 - 2, e.width + 4, e.height + 4);
+
         ctx.fillStyle = color;
 
-        // -- BODY CONSTRUCTION --
-        // Main Torso
-        ctx.fillRect(-14, -8, 28, 16);
-        // Chest Fluff
-        ctx.fillRect(8, -4, 6, 14);
+        // BODY
+        ctx.fillRect(-15, -8, 30, 16); // Main body block
+        ctx.fillRect(10, -16, 12, 12); // Neck/Head block connecting
 
-        // -- ANIMATED LEGS --
-        // Back Leg L
-        ctx.fillRect(-12 + cycle, 8, 6, 12);
-        // Front Leg L
-        ctx.fillRect(6 + cycle, 8, 6, 12);
-        // Back Leg R
-        ctx.fillStyle = '#7f1d1d'; // Darker shade for back legs (depth)
-        ctx.fillRect(-8 - cycle, 8, 6, 10);
-        // Front Leg R
-        ctx.fillRect(10 - cycle, 8, 6, 10);
+        // HEAD
+        ctx.fillRect(12, -20, 16, 16); // Main Head
+        ctx.fillRect(26, -14, 8, 8);   // Snout
+        ctx.fillStyle = '#000'; 
+        ctx.fillRect(32, -14, 4, 4);   // Nose
 
-        // Reset color for head/tail
+        // EYES (RED)
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(20, -16, 4, 4);
+
+        // EARS
         ctx.fillStyle = color;
+        ctx.fillRect(14, -26, 4, 6);
+        ctx.fillRect(22, -26, 4, 6);
 
-        // -- HEAD --
-        // Neck
-        ctx.fillRect(10, -14, 8, 10);
-        // Skull
-        ctx.fillRect(12, -18, 14, 12);
-        // Snout
-        ctx.fillRect(24, -12, 8, 6);
-        // Nose
-        ctx.fillStyle = '#000';
-        ctx.fillRect(30, -12, 4, 4);
-        
-        // Eye (Red/Glowing)
-        ctx.fillStyle = '#ef4444'; 
-        ctx.fillRect(18, -14, 4, 2);
-
-        // Ears
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.moveTo(14, -18); ctx.lineTo(16, -26); ctx.lineTo(20, -18); // Left Ear
-        ctx.moveTo(22, -18); ctx.lineTo(24, -26); ctx.lineTo(26, -18); // Right Ear
-        ctx.fill();
-
-        // -- TAIL --
-        // Animated tail
-        const tailWag = Math.sin(engine.current.frameCount * 0.2) * 5;
-        ctx.beginPath();
-        ctx.moveTo(-14, -8);
-        ctx.lineTo(-24, -4 + tailWag);
-        ctx.lineTo(-20, 4 + tailWag);
-        ctx.lineTo(-14, 0);
-        ctx.fill();
-
-        // Stun stars
-        if (e.stunTimer > 0) {
-            ctx.fillStyle = '#facc15';
-            ctx.fillRect(10, -30, 4, 4);
-            ctx.fillRect(20, -25, 4, 4);
-            ctx.fillRect(0, -28, 4, 4);
+        // LEGS (Animated)
+        ctx.fillStyle = '#1f2937'; // Darker for legs
+        if (Math.abs(e.vx) > 0.1) {
+            ctx.fillRect(-12 + cycle, 8, 6, 10);
+            ctx.fillRect(12 - cycle, 8, 6, 10);
+        } else {
+            ctx.fillRect(-12, 8, 6, 10);
+            ctx.fillRect(12, 8, 6, 10);
         }
+
+        // TAIL
+        ctx.fillStyle = color;
+        ctx.fillRect(-20, -10 + (cycle/2), 6, 14);
 
         // Health Bar
         ctx.fillStyle = '#7f1d1d'; 
-        ctx.fillRect(-15, -35, 30, 4);
+        ctx.fillRect(-15, -40, 30, 4);
         ctx.fillStyle = '#22c55e'; 
-        ctx.fillRect(-15, -35, 30 * (e.health/e.maxHealth), 4);
+        ctx.fillRect(-15, -40, 30 * (e.health/e.maxHealth), 4);
         
         ctx.restore();
     });
 
-    // --- DRAW CROWS (PIXEL ART) ---
+    // --- DRAW CROWS (CHUNKY PIXEL) ---
     entities.current.crows.forEach(c => {
          ctx.save(); 
          ctx.translate(c.x + c.width/2, c.y + c.height/2); 
          if (!c.facingRight) ctx.scale(-1, 1);
          
-         ctx.fillStyle = '#1f2937'; // Dark Grey Body
+         // Body
+         ctx.fillStyle = '#1f2937';
+         ctx.fillRect(-10, -5, 20, 10);
          
-         // Body (Pixel Shape)
-         ctx.fillRect(-8, -4, 16, 8);
-         ctx.fillRect(-6, -6, 12, 12); // Rounding
-
          // Head
-         ctx.fillRect(6, -8, 8, 8);
+         ctx.fillRect(5, -10, 10, 10);
          
-         // Beak (Yellow)
-         ctx.fillStyle = '#facc15';
-         ctx.fillRect(14, -4, 6, 2);
-         ctx.fillRect(14, -2, 4, 2);
-
-         // Eye
-         ctx.fillStyle = '#fff';
-         ctx.fillRect(10, -6, 2, 2);
-
-         // Wings (Animated)
+         // Beak
+         ctx.fillStyle = '#fbbf24';
+         ctx.fillRect(15, -6, 6, 4);
+         
+         // Wing (Animated)
          ctx.fillStyle = '#000';
-         if (c.state === 'FLY') { 
+         if (c.state === 'FLY') {
              const flap = Math.floor(Math.sin(engine.current.frameCount * 0.5) * 8);
-             ctx.fillRect(-4, -8 + flap, 12, 4); // Wing top
-             ctx.fillRect(-6, -4 + flap, 10, 4); // Wing mid
-         } else { 
-             // Dive wings (swept back)
-             ctx.fillRect(-10, -10, 8, 4);
-             ctx.fillRect(-8, -6, 8, 4);
+             ctx.fillRect(-5, -10 + flap, 12, 6);
+         } else {
+             ctx.fillRect(-8, -8, 12, 6); // Dive wings
          }
-         
+
          ctx.restore();
     });
 
-    // DRAW PLAYER (RESTORED ANIMATIONS)
+    // --- DRAW PLAYER (RETRO LINK STYLE) ---
     const p = entities.current.player;
     if (p) {
         ctx.save();
@@ -1313,45 +1305,67 @@ const GameLogic: React.FC = () => {
 
         if (p.isDashing) { ctx.globalAlpha = 0.5; ctx.fillStyle = '#fff'; }
 
-        const walkCycle = Math.sin(engine.current.frameCount * 0.3) * 6;
-        ctx.fillStyle = '#57534e'; // Pants
-        if ((Math.abs(p.vx) > 0.1 || Math.abs(p.vy) > 0.1) && (p.grounded || isTopDown())) {
-          ctx.fillRect(-6 + walkCycle, 10, 6, 14);
-          ctx.fillRect(0 - walkCycle, 10, 6, 14);
-        } else {
-          ctx.fillRect(-6, 10, 6, 14);
-          ctx.fillRect(0, 10, 6, 14);
-        }
+        // Boots
+        ctx.fillStyle = '#78350f';
+        const walk = (Math.abs(p.vx) > 0.1 || Math.abs(p.vy) > 0.1) && (p.grounded || isTopDown()) ? Math.sin(engine.current.frameCount * 0.4) * 6 : 0;
+        ctx.fillRect(-10 + walk, 12, 8, 12); // Left Leg
+        ctx.fillRect(2 - walk, 12, 8, 12);  // Right Leg
 
-        ctx.fillStyle = '#22c55e'; // Tunic
-        ctx.fillRect(-8, -10, 16, 20);
-        ctx.fillStyle = '#fca5a5'; // Skin
-        ctx.fillRect(-6, -22, 12, 12);
-        ctx.fillStyle = '#15803d'; // Hat
-        ctx.fillRect(-7, -24, 14, 4);
+        // Tunic (Green)
+        ctx.fillStyle = '#16a34a';
+        ctx.fillRect(-10, -12, 20, 24); 
+        
+        // Belt
+        ctx.fillStyle = '#92400e';
+        ctx.fillRect(-10, 4, 20, 4);
 
-        // Arms & Bow
+        // Head (Skin)
+        ctx.fillStyle = '#fca5a5';
+        ctx.fillRect(-8, -26, 16, 14);
+
+        // Hat (Green Hood)
+        ctx.fillStyle = '#15803d';
+        ctx.fillRect(-10, -32, 20, 8); // Top part
+        ctx.fillRect(-12, -30, 4, 24); // Back part/Cap tail
+
+        // Eyes
+        ctx.fillStyle = '#000';
+        ctx.fillRect(2, -22, 2, 4);
+
+        // ARMS & BOW
         ctx.save();
+        // Arms should aim towards aimAngle
         let armAngle = p.facingRight ? p.aimAngle : Math.PI - p.aimAngle;
         ctx.rotate(armAngle);
         
-        ctx.fillStyle = '#22c55e'; 
-        ctx.fillRect(0, -3, 16, 6);
-        
+        // Arm
+        ctx.fillStyle = '#16a34a'; 
+        ctx.fillRect(-4, -4, 16, 8);
+        // Hand
+        ctx.fillStyle = '#fca5a5';
+        ctx.fillRect(10, -4, 4, 8);
+
+        // BOW
         ctx.strokeStyle = '#fde047';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.arc(14, 0, 12, -Math.PI/2, Math.PI/2); // Bow arc
+        ctx.arc(14, 0, 14, -Math.PI/2, Math.PI/2);
+        ctx.stroke();
+        
+        // String
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        if (p.isAiming || input.current.mouse.leftDown || input.current.touch.rightStick.active) {
+            ctx.moveTo(14, -14); ctx.lineTo(4, 0); ctx.lineTo(14, 14); // Pulled
+            // Arrow Loaded
+            ctx.fillStyle = '#fbbf24';
+            ctx.fillRect(4, -1, 20, 2);
+        } else {
+            ctx.moveTo(14, -14); ctx.lineTo(14, 14); // Idle
+        }
         ctx.stroke();
 
-        // Draw arrow if aiming or just idle
-        if (p.isAiming || !p.isAiming) { // Always show arrow ready
-            ctx.beginPath();
-            ctx.moveTo(14, -12); ctx.lineTo(8, 0); ctx.lineTo(14, 12); // String pulled
-            ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke();
-            // Arrow on bow
-            ctx.fillStyle = '#854d0e'; ctx.fillRect(8, -1, 14, 2);
-        } 
         ctx.restore();
         
         if (p.powerUpTimer > 0) {
