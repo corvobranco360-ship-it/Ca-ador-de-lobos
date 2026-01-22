@@ -22,7 +22,6 @@ const DASH_COOLDOWN_FRAMES = 60;
 const DASH_SPEED = 15;
 const CANVAS_WIDTH = 960;
 const CANVAS_HEIGHT = 540;
-const LAKE_LEVEL_Y = CANVAS_HEIGHT - 32;
 
 // --- UI CONSTANTS ---
 const LEFT_STICK_X = 120;
@@ -59,7 +58,8 @@ const GameLogic: React.FC = () => {
     enemiesKilled: 0,
     enemiesRequired: 4,
     isRaining: false,
-    lightningTimer: 0
+    lightningTimer: 0,
+    floodLevel: 0
   });
 
   const entities = useRef<{
@@ -165,7 +165,8 @@ const GameLogic: React.FC = () => {
       enemiesKilled: 0,
       enemiesRequired: 4,
       isRaining: false,
-      lightningTimer: 0
+      lightningTimer: 0,
+      floodLevel: 0
     };
     entities.current.dog = null;
     startLevel(1);
@@ -176,8 +177,9 @@ const GameLogic: React.FC = () => {
     state.current.waveProgress = 0;
     state.current.enemiesKilled = 0;
     state.current.enemiesRequired = level === 1 ? 4 : 4 + (level * 2); 
-    state.current.isRaining = level === 2 || level === 5; 
-    
+    state.current.isRaining = level === 2 || level === 4 || level === 5; // Rain in level 4 now
+    state.current.floodLevel = 0; // Reset flood
+
     entities.current.enemies = [];
     entities.current.crows = [];
     entities.current.arrows = [];
@@ -208,14 +210,15 @@ const GameLogic: React.FC = () => {
     generateLevel(level);
 
     if (entities.current.dog) {
-        entities.current.dog.x = 20;
-        entities.current.dog.y = CANVAS_HEIGHT - 100;
+        entities.current.dog.x = 50;
+        entities.current.dog.y = isTopDown() ? CANVAS_HEIGHT/2 : CANVAS_HEIGHT - 100;
         entities.current.dog.vx = 0;
         entities.current.dog.vy = 0;
         entities.current.dog.state = 'IDLE';
         entities.current.dog.aggroTimer = 0;
         entities.current.dog.target = null;
     } else if (level === 3) {
+        // Fallback if dog wasn't saved/found, auto give dog in RPG level
         entities.current.dog = {
             id: 777,
             type: EntityType.DOG,
@@ -267,9 +270,13 @@ const GameLogic: React.FC = () => {
   };
 
   const spawnBushesAndRabbits = () => {
-      for(let i=0; i<8; i++) {
-          const x = 200 + Math.random() * (CANVAS_WIDTH - 300);
-          const y = 100 + Math.random() * (CANVAS_HEIGHT - 200);
+      // EXACTLY 9 RABBITS
+      for(let i=0; i<9; i++) {
+          // Keep strictly within screen bounds with margin
+          const margin = 100;
+          const x = margin + Math.random() * (CANVAS_WIDTH - margin * 2);
+          const y = margin + Math.random() * (CANVAS_HEIGHT - margin * 2);
+          
           entities.current.bushes.push({
               id: Math.random(), type: EntityType.BUSH, x, y, width: 40, height: 30,
               vx: 0, vy: 0, grounded: true, markedForDeletion: false, hasRabbit: true, shakeTimer: 0
@@ -285,7 +292,7 @@ const GameLogic: React.FC = () => {
     const platforms = entities.current.platforms;
     if (level === 3) {
         spawnBushesAndRabbits();
-        state.current.enemiesRequired = 5; 
+        state.current.enemiesRequired = 9; // 9 Rabbits to catch
     } else {
         if (level === 1) {
            platforms.push({ id: 1, type: EntityType.PLATFORM, x: 200, y: 400, width: 200, height: 20, vx: 0, vy: 0, grounded: true, markedForDeletion: false });
@@ -296,14 +303,25 @@ const GameLogic: React.FC = () => {
             platforms.push({ id: 2, type: EntityType.PLATFORM, x: 300, y: 350, width: 400, height: 20, vx: 0, vy: 0, grounded: true, markedForDeletion: false });
             platforms.push({ id: 3, type: EntityType.PLATFORM, x: 800, y: 400, width: 100, height: 20, vx: 0, vy: 0, grounded: true, markedForDeletion: false });
             if (!entities.current.dog) {
-                entities.current.cages.push({ id: 888, type: EntityType.CAGE, x: 600, y: 290, width: 60, height: 60, vx: 0, vy: 0, grounded: true, markedForDeletion: false, health: 3 });
+                // Cage spawn logic
+                entities.current.cages.push({ id: 888, type: EntityType.CAGE, x: 600, y: 290, width: 40, height: 60, vx: 0, vy: 0, grounded: true, markedForDeletion: false, health: 3 });
             }
         } else if (level === 4) {
-            platforms.push({ id: 1, type: EntityType.PLATFORM, x: 100, y: 400, width: 100, height: 20, vx: 0, vy: 0, grounded: true, markedForDeletion: false });
-            platforms.push({ id: 2, type: EntityType.PLATFORM, x: 300, y: 300, width: 100, height: 20, vx: 0, vy: 0, grounded: true, markedForDeletion: false });
-            platforms.push({ id: 3, type: EntityType.PLATFORM, x: 500, y: 200, width: 100, height: 20, vx: 0, vy: 0, grounded: true, markedForDeletion: false });
-            platforms.push({ id: 4, type: EntityType.PLATFORM, x: 700, y: 280, width: 80, height: 20, vx: 0, vy: 0, grounded: true, markedForDeletion: false });
-            platforms.push({ id: 5, type: EntityType.PLATFORM, x: 840, y: 210, width: 120, height: 20, vx: 0, vy: 0, grounded: true, markedForDeletion: false });
+            // "THE RISING TIDE" - Verticality Focus
+            // Bottom platform (starting area - soon to be flooded)
+            platforms.push({ id: 1, type: EntityType.PLATFORM, x: 20, y: 450, width: 200, height: 20, vx: 0, vy: 0, grounded: true, markedForDeletion: false });
+            
+            // Zig-zag pattern going up
+            platforms.push({ id: 2, type: EntityType.PLATFORM, x: 300, y: 380, width: 150, height: 20, vx: 0, vy: 0, grounded: true, markedForDeletion: false });
+            platforms.push({ id: 3, type: EntityType.PLATFORM, x: 600, y: 320, width: 150, height: 20, vx: 0, vy: 0, grounded: true, markedForDeletion: false });
+            platforms.push({ id: 4, type: EntityType.PLATFORM, x: 200, y: 250, width: 120, height: 20, vx: 0, vy: 0, grounded: true, markedForDeletion: false });
+            platforms.push({ id: 5, type: EntityType.PLATFORM, x: 50, y: 150, width: 100, height: 20, vx: 0, vy: 0, grounded: true, markedForDeletion: false });
+            
+            // The peak
+            platforms.push({ id: 6, type: EntityType.PLATFORM, x: 500, y: 100, width: 400, height: 20, vx: 0, vy: 0, grounded: true, markedForDeletion: false });
+
+            // Ensure more crows
+            state.current.enemiesRequired = 8;
         } else {
             platforms.push({ id: 1, type: EntityType.PLATFORM, x: 100, y: 350, width: 200, height: 20, vx: 0, vy: 0, grounded: true, markedForDeletion: false });
             platforms.push({ id: 2, type: EntityType.PLATFORM, x: 660, y: 350, width: 200, height: 20, vx: 0, vy: 0, grounded: true, markedForDeletion: false });
@@ -312,9 +330,9 @@ const GameLogic: React.FC = () => {
     }
 
     const doorX = level % 2 === 0 ? 50 : CANVAS_WIDTH - 80;
-    const doorY = level === 4 ? 140 : CANVAS_HEIGHT - 32 - 64; 
+    const doorY = level === 4 ? 36 : CANVAS_HEIGHT - 32 - 64; // Level 4 door is high up!
     entities.current.door = {
-        id: 999, type: EntityType.DOOR, x: doorX, y: isTopDown() ? 50 : doorY, width: 40, height: 64, vx: 0, vy: 0, grounded: true, markedForDeletion: false, isOpen: false
+        id: 999, type: EntityType.DOOR, x: level === 4 ? 850 : doorX, y: doorY, width: 40, height: 64, vx: 0, vy: 0, grounded: true, markedForDeletion: false, isOpen: false
     };
   };
 
@@ -349,6 +367,28 @@ const GameLogic: React.FC = () => {
   const setGameOver = () => {
     state.current.status = GameStatus.GAME_OVER;
     playSound('explosion');
+  };
+
+  const spawnDog = (x: number, y: number) => {
+      entities.current.dog = {
+          id: 777,
+          type: EntityType.DOG,
+          x: x, y: y,
+          width: 32, height: 24,
+          vx: 0, vy: 0,
+          grounded: false, markedForDeletion: false,
+          facingRight: true,
+          state: 'IDLE',
+          target: null,
+          barkTimer: 0,
+          tongueOut: false,
+          animTimer: 0,
+          aggroTimer: 0,
+          healTimer: 0
+      };
+      spawnParticles(x, y, '#fbbf24', 20, 2);
+      spawnFloatingText(x, y - 30, "FRIEND SAVED!", "#fbbf24");
+      playSound('bark');
   };
 
   const fireArrow = (player: PlayerEntity) => {
@@ -398,6 +438,27 @@ const GameLogic: React.FC = () => {
   const update = () => {
     engine.current.frameCount++;
     if (state.current.status !== GameStatus.PLAYING) return;
+
+    // --- LEVEL 4 SPECIFIC: FLOOD LOGIC ---
+    if (state.current.level === 4) {
+        // Water rises slowly
+        state.current.floodLevel += 0.25;
+        const waterY = CANVAS_HEIGHT - state.current.floodLevel;
+        const player = entities.current.player;
+        
+        if (player && player.y + player.height > waterY) {
+            // Player is in water
+            if (engine.current.frameCount % 20 === 0) {
+                player.health -= 5;
+                spawnFloatingText(player.x, player.y - 20, "DROWNING!", "#3b82f6");
+                playSound('splash');
+                if (player.health <= 0) handlePlayerDeath();
+            }
+            // Major slow down in water
+            player.vx *= 0.5;
+            player.vy = Math.min(player.vy, 2); // Buoyancy/Resistance
+        }
+    }
 
     if (state.current.isRaining) {
         if (Math.random() < 0.005) { 
@@ -608,39 +669,50 @@ const GameLogic: React.FC = () => {
               const bush = entities.current.bushes.find(b => Math.abs(b.x - rabbit.x + 10) < 10 && Math.abs(b.y - rabbit.y + 10) < 10);
               if (!bush) { rabbit.state = 'IDLE'; rabbit.isHidden = false; return; }
 
-              const distP = Math.sqrt(Math.pow(player.x - rabbit.x, 2) + Math.pow(player.y - rabbit.y, 2));
-              const distD = Math.sqrt(Math.pow(dog.x - rabbit.x, 2) + Math.pow(dog.y - rabbit.y, 2));
-              
-              if (distP < 30 || (dog.state === 'FLUSH' && distD < 30)) {
-                  rabbit.state = 'FLEE';
-                  rabbit.isHidden = false;
-                  rabbit.fleeTimer = 300; 
-                  playSound('splash'); 
-                  bush.shakeTimer = 20;
-                  spawnParticles(bush.x, bush.y, '#166534', 5);
-                  spawnFloatingText(rabbit.x, rabbit.y - 10, "!", "#fff");
+              // Flush logic: Dog pointing AND (Player close OR Whistle triggered externally)
+              // But here we check simple proximity or if dog is in flush state
+              if ((dog.state === 'POINTING' || dog.state === 'FLUSH') && dog.target === bush) {
+                  const distP = Math.sqrt(Math.pow(player.x - rabbit.x, 2) + Math.pow(player.y - rabbit.y, 2));
+                  if (distP < 60 || dog.state === 'FLUSH') {
+                      rabbit.state = 'FLEE';
+                      rabbit.isHidden = false;
+                      rabbit.fleeTimer = 300; 
+                      playSound('splash'); 
+                      bush.shakeTimer = 20;
+                      spawnParticles(bush.x, bush.y, '#166534', 5);
+                      spawnFloatingText(rabbit.x, rabbit.y - 10, "!", "#fff");
+                      dog.state = 'CHASE'; 
+                      dog.target = rabbit;
+                  }
               }
           } else if (rabbit.state === 'FLEE') {
               rabbit.fleeTimer--;
+              
+              // Run away from dog
               const dxDog = rabbit.x - dog.x;
               const dyDog = rabbit.y - dog.y;
-              const dxPlay = rabbit.x - player.x;
-              const dyPlay = rabbit.y - player.y;
-              let runX = dxDog * 1.5 + dxPlay * 0.8;
-              let runY = dyDog * 1.5 + dyPlay * 0.8;
-              const mag = Math.sqrt(runX*runX + runY*runY);
-              rabbit.vx = (runX/mag) * 3.5; 
-              rabbit.vy = (runY/mag) * 3.5;
+              
+              const mag = Math.sqrt(dxDog*dxDog + dyDog*dyDog);
+              if (mag > 0) {
+                  rabbit.vx = (dxDog/mag) * 3.0; 
+                  rabbit.vy = (dyDog/mag) * 3.0;
+              }
+
               rabbit.x += rabbit.vx;
               rabbit.y += rabbit.vy;
               rabbit.facingRight = rabbit.vx > 0;
 
-              if (rabbit.fleeTimer % 10 === 0) { 
-                  const bush = entities.current.bushes.find(b => Math.abs(b.x - rabbit.x) < 20 && Math.abs(b.y - rabbit.y) < 20);
+              // KEEP IN BOUNDS
+              if(rabbit.x < 10 || rabbit.x > CANVAS_WIDTH - 26) { rabbit.vx *= -1; rabbit.x = Math.max(10, Math.min(CANVAS_WIDTH - 26, rabbit.x)); }
+              if(rabbit.y < 10 || rabbit.y > CANVAS_HEIGHT - 26) { rabbit.vy *= -1; rabbit.y = Math.max(10, Math.min(CANVAS_HEIGHT - 26, rabbit.y)); }
+
+              if (rabbit.fleeTimer <= 0) {
+                  const bush = entities.current.bushes.find(b => Math.abs(b.x - rabbit.x) < 40 && Math.abs(b.y - rabbit.y) < 40);
                   if (bush) {
                       rabbit.state = 'HIDDEN';
                       rabbit.isHidden = true;
                       rabbit.vx = 0; rabbit.vy = 0;
+                      rabbit.x = bush.x + 10; rabbit.y = bush.y + 10;
                       bush.shakeTimer = 10;
                       if (dog.target === rabbit) {
                           dog.state = 'IDLE';
@@ -649,8 +721,6 @@ const GameLogic: React.FC = () => {
                       }
                   }
               }
-              if(rabbit.x < 0 || rabbit.x > CANVAS_WIDTH) rabbit.vx *= -1;
-              if(rabbit.y < 0 || rabbit.y > CANVAS_HEIGHT) rabbit.vy *= -1;
           } 
       });
   };
@@ -680,124 +750,132 @@ const GameLogic: React.FC = () => {
 
   const updateDog = (player: PlayerEntity, whistleTriggered: boolean) => {
     const dog = entities.current.dog!;
-    if (state.current.level === 3) {
+    
+    // Bounds check for Dog
+    if(dog.x < 0) dog.x = 0;
+    if(dog.x > CANVAS_WIDTH - dog.width) dog.x = CANVAS_WIDTH - dog.width;
+    if(dog.y < 0) dog.y = 0;
+    if(dog.y > CANVAS_HEIGHT - dog.height) dog.y = CANVAS_HEIGHT - dog.height;
+
+    if (state.current.level === 3) { // RPG HUNTING MODE
+        // 1. RETRIEVE STATE
         if (dog.state === 'CARRY') {
             const dx = player.x - dog.x;
             const dy = player.y - dog.y;
             const dist = Math.sqrt(dx*dx + dy*dy);
-            if (dist > 40) {
-                dog.vx = (dx/dist) * 3.5;
-                dog.vy = (dy/dist) * 3.5;
+            
+            if (dist > 30) {
+                dog.vx = (dx/dist) * 3.8;
+                dog.vy = (dy/dist) * 3.8;
             } else {
-                entities.current.meats.push({
-                    id: Math.random(), type: EntityType.MEAT, x: dog.x, y: dog.y, width: 16, height: 16, vx: 0, vy: 0, grounded: true, markedForDeletion: false, value: 50
-                });
                 state.current.enemiesKilled++;
                 playSound('coin');
                 dog.state = 'IDLE';
                 dog.target = null;
                 spawnFloatingText(dog.x, dog.y - 20, "GOOD BOY!", "#fbbf24");
+                spawnParticles(dog.x, dog.y, '#22c55e', 10);
             }
             dog.x += dog.vx;
             dog.y += dog.vy;
             dog.facingRight = dog.vx > 0;
             return; 
         }
+
         if (whistleTriggered) {
-            if (dog.state === 'POINTING') {
-                dog.state = 'FLUSH';
-                dog.aggroTimer = 60; 
-                playSound('bark');
-            } else {
-                dog.state = 'FOLLOW';
-                playSound('whistle');
-            }
+             if (dog.state === 'POINTING') {
+                 dog.state = 'FLUSH'; 
+                 playSound('bark');
+             } else {
+                 dog.state = 'FOLLOW';
+                 dog.target = player;
+                 playSound('whistle');
+                 spawnFloatingText(dog.x, dog.y - 20, "Here!", "#fff");
+             }
         }
-        const visibleRabbit = entities.current.rabbits.find(r => r.state === 'FLEE' && !r.isHidden);
-        if (visibleRabbit && dog.state !== 'CARRY') {
-            dog.state = 'CHASE';
-            dog.target = visibleRabbit;
-        }
-        if (dog.state === 'CHASE' && dog.target) {
+
+        if (dog.state === 'POINTING') {
+            dog.vx = 0; dog.vy = 0;
+            if (engine.current.frameCount % 40 === 0) spawnFloatingText(dog.x, dog.y - 20, "!", "#ef4444");
+            if (!dog.target) dog.state = 'IDLE';
+        } 
+        else if (dog.state === 'CHASE' && dog.target) {
             const rabbit = dog.target as RabbitEntity;
-            if (rabbit.state === 'HIDDEN' || rabbit.markedForDeletion) {
-                dog.state = 'IDLE'; dog.target = null; 
+            if (rabbit.state === 'HIDDEN') {
+                dog.state = 'IDLE'; dog.target = null; spawnFloatingText(dog.x, dog.y - 20, "?", "#fff");
             } else {
                 const dx = rabbit.x - dog.x;
                 const dy = rabbit.y - dog.y;
                 const dist = Math.sqrt(dx*dx + dy*dy);
-                if (dist < 20) {
+                
+                if (dist < 15) {
                     dog.state = 'CARRY';
-                    rabbit.markedForDeletion = true;
+                    rabbit.state = 'DEAD'; 
+                    rabbit.markedForDeletion = true; 
                     playSound('hit');
                     spawnParticles(dog.x, dog.y, '#fff', 10);
                 } else {
-                    dog.vx = (dx/dist) * 4.2; 
-                    dog.vy = (dy/dist) * 4.2;
-                    spawnParticles(dog.x, dog.y + 20, '#d1d5db', 1); 
+                    dog.vx = (dx/dist) * 4.5; 
+                    dog.vy = (dy/dist) * 4.5;
                 }
             }
-        } else if (dog.state === 'FLUSH' && dog.target) {
-            const dx = dog.target.x - dog.x;
-            const dy = dog.target.y - dog.y;
-            if (Math.abs(dx) < 10 && Math.abs(dy) < 10) {
-                const bush = dog.target as BushEntity;
-                bush.shakeTimer = 30;
-                const rabbit = entities.current.rabbits.find(r => r.state === 'HIDDEN' && Math.abs(r.x - bush.x) < 20);
-                if (rabbit) {
-                    rabbit.state = 'FLEE';
-                    rabbit.isHidden = false;
-                    rabbit.fleeTimer = 300;
-                    playSound('splash');
-                } else {
-                    dog.state = 'IDLE';
-                }
-            } else {
-                dog.vx = Math.sign(dx) * 4;
-                dog.vy = Math.sign(dy) * 4;
-            }
-        } else if (dog.state === 'POINTING') {
-            dog.vx = 0; dog.vy = 0;
-            if (engine.current.frameCount % 60 === 0) spawnFloatingText(dog.x, dog.y - 10, "!", "#fbbf24");
-        } else {
-            let smellTarget = null;
-            let minDist = 400;
-            entities.current.bushes.forEach(bush => {
-                const dist = Math.sqrt(Math.pow(bush.x - dog.x, 2) + Math.pow(bush.y - dog.y, 2));
-                const hasHiddenRabbit = entities.current.rabbits.some(r => r.state === 'HIDDEN' && Math.abs(r.x - bush.x) < 20);
-                if (dist < minDist && hasHiddenRabbit) {
-                    minDist = dist;
-                    smellTarget = bush;
-                }
-            });
-            if (smellTarget) {
-                const dx = smellTarget.x - dog.x;
-                const dy = smellTarget.y - dog.y;
-                const dist = Math.sqrt(dx*dx + dy*dy);
-                if (dist > 60) {
-                    dog.vx = (dx/dist) * 3;
-                    dog.vy = (dy/dist) * 3;
-                } else {
-                    dog.state = 'POINTING';
-                    dog.target = smellTarget;
-                    playSound('bark');
-                }
-            } else {
-                const dx = (player.x - 30) - dog.x;
-                const dy = player.y - dog.y;
-                const dist = Math.sqrt(dx*dx + dy*dy);
-                if (dist > 60) {
-                    dog.vx = (dx/dist) * 2.5;
-                    dog.vy = (dy/dist) * 2.5;
-                } else {
-                    dog.vx = 0; dog.vy = 0;
-                }
-            }
+            dog.x += dog.vx;
+            dog.y += dog.vy;
+            dog.facingRight = dog.vx > 0;
+        } 
+        else if (dog.state === 'IDLE' || dog.state === 'FOLLOW') {
+             // SMELL LOGIC
+             let closestBush = null;
+             let minDist = 300; 
+
+             entities.current.bushes.forEach(bush => {
+                 const hasRabbit = entities.current.rabbits.some(r => r.state === 'HIDDEN' && Math.abs(r.x - bush.x) < 20);
+                 if (hasRabbit) {
+                     const d = Math.sqrt(Math.pow(bush.x - dog.x, 2) + Math.pow(bush.y - dog.y, 2));
+                     if (d < minDist) { minDist = d; closestBush = bush; }
+                 }
+             });
+
+             if (closestBush && dog.state !== 'FOLLOW') {
+                 const dx = closestBush.x - dog.x;
+                 const dy = closestBush.y - dog.y;
+                 const dist = Math.sqrt(dx*dx + dy*dy);
+                 
+                 if (dist < 60) {
+                     dog.state = 'POINTING';
+                     dog.target = closestBush;
+                     playSound('bark');
+                 } else {
+                     dog.vx = (dx/dist) * 3;
+                     dog.vy = (dy/dist) * 3;
+                     dog.x += dog.vx;
+                     dog.y += dog.vy;
+                     dog.facingRight = dog.vx > 0;
+                 }
+             } else {
+                 if (dog.state === 'FOLLOW' && dog.target) {
+                     const dx = dog.target.x - dog.x;
+                     const dy = dog.target.y - dog.y;
+                     const dist = Math.sqrt(dx*dx + dy*dy);
+                     if (dist > 60) {
+                         dog.vx = (dx/dist) * 3; dog.vy = (dy/dist) * 3;
+                         dog.x += dog.vx; dog.y += dog.vy;
+                         dog.facingRight = dog.vx > 0;
+                     } else {
+                         dog.state = 'IDLE'; dog.target = null;
+                     }
+                 } else {
+                     if (Math.random() < 0.02) {
+                         dog.vx = (Math.random() - 0.5) * 2;
+                         dog.vy = (Math.random() - 0.5) * 2;
+                     }
+                     dog.x += dog.vx;
+                     dog.y += dog.vy;
+                     if (engine.current.frameCount % 20 === 0) dog.vx = 0; 
+                 }
+             }
         }
-        dog.x += dog.vx;
-        dog.y += dog.vy;
-        dog.facingRight = dog.vx > 0;
     } else {
+        // ... (Platformer Dog Logic)
         if (whistleTriggered) {
             dog.aggroTimer = 300;
             playSound('whistle');
@@ -881,8 +959,6 @@ const GameLogic: React.FC = () => {
             if (dog.y + dog.height > CANVAS_HEIGHT - 32) { dog.y = CANVAS_HEIGHT - 32 - dog.height; dog.vy = 0; dog.grounded = true; }
         }
     }
-    if (dog.x < 0) dog.x = 0;
-    if (dog.x > CANVAS_WIDTH - dog.width) dog.x = CANVAS_WIDTH - dog.width;
   };
 
   const checkPlatformCollisions = (entity: Entity) => {
@@ -969,7 +1045,11 @@ const GameLogic: React.FC = () => {
   };
 
   const updateCrows = (player: PlayerEntity) => {
-        if (state.current.level !== 3 && engine.current.frameCount % 300 === 0 && entities.current.crows.length < 3) {
+        // More crows in level 4!
+        const crowLimit = state.current.level === 4 ? 6 : 3;
+        const spawnRate = state.current.level === 4 ? 120 : 300;
+
+        if (state.current.level !== 3 && engine.current.frameCount % spawnRate === 0 && entities.current.crows.length < crowLimit) {
              entities.current.crows.push({
                  id: Math.random(), type: EntityType.CROW, state: 'FLY', x: Math.random() > 0.5 ? -50 : CANVAS_WIDTH + 50, y: 50 + Math.random() * 100, width: 24, height: 24, vx: Math.random() > 0.5 ? 2 : -2, vy: 0, grounded: false, markedForDeletion: false, startX: 0, startY: 0, diveTimer: 0, facingRight: true, health: 2, color: '#374151'
              });
@@ -1010,6 +1090,7 @@ const GameLogic: React.FC = () => {
           a.y += a.vy;
           a.rotation = Math.atan2(a.vy, a.vx);
 
+          // Enemy Collision
           entities.current.enemies.forEach(e => {
               if (checkCollision(a, e)) {
                   a.markedForDeletion = true;
@@ -1019,15 +1100,33 @@ const GameLogic: React.FC = () => {
                   if (e.health <= 0) { killEnemy(e, entities.current.player!); } else { e.vx = -e.vx; e.stunTimer = 10; }
               }
           });
+          
+          // Crow Collision
           entities.current.crows.forEach(c => {
                if (checkCollision(a, c)) {
                    a.markedForDeletion = true; c.health -= 1; playSound('hit');
                    if (c.health <= 0) { c.markedForDeletion = true; state.current.score += 150; spawnParticles(c.x, c.y, '#374151', 10); playSound('explosion'); }
                }
           });
+
+          // Cage Collision (Liberate Dog)
+          entities.current.cages.forEach(c => {
+               if (checkCollision(a, c)) {
+                   a.markedForDeletion = true;
+                   c.health -= 1;
+                   playSound('break');
+                   spawnParticles(c.x, c.y, '#9ca3af', 5);
+                   if (c.health <= 0) {
+                       c.markedForDeletion = true;
+                       spawnDog(c.x, c.y + c.height - 24);
+                   }
+               }
+          });
+
           if (!isTopDown() && checkPlatformCollisionsSimple(a)) { a.markedForDeletion = true; spawnParticles(a.x, a.y, '#9ca3af', 3); }
       });
       entities.current.arrows = entities.current.arrows.filter(a => !a.markedForDeletion);
+      entities.current.cages = entities.current.cages.filter(c => !c.markedForDeletion);
   };
 
   const updateNets = () => {
@@ -1145,6 +1244,34 @@ const GameLogic: React.FC = () => {
 
     drawBackground(ctx);
 
+    // --- LEVEL 4 DRAW: RISING WATER ---
+    if (state.current.level === 4 && state.current.floodLevel > 0) {
+        ctx.fillStyle = 'rgba(37, 99, 235, 0.5)'; // Transparent Blue
+        const waterHeight = state.current.floodLevel;
+        const waterY = CANVAS_HEIGHT - waterHeight;
+        
+        ctx.fillRect(0, waterY, CANVAS_WIDTH, waterHeight);
+        
+        // Water surface line
+        ctx.fillStyle = '#60a5fa';
+        ctx.fillRect(0, waterY, CANVAS_WIDTH, 4);
+        
+        // Foam
+        ctx.fillStyle = '#fff';
+        for(let i=0; i<CANVAS_WIDTH; i+=40) {
+            if ((i + engine.current.frameCount) % 80 < 40) {
+                ctx.fillRect(i, waterY, 20, 2);
+            }
+        }
+    }
+
+    if (state.current.isRaining) {
+        ctx.fillStyle = 'rgba(174, 194, 224, 0.6)';
+        entities.current.rainDrops.forEach(d => {
+            ctx.fillRect(d.x, d.y, 2, d.length);
+        });
+    }
+
     if (engine.current.shake > 0) {
         ctx.save(); const dx = (Math.random() - 0.5) * engine.current.shake; const dy = (Math.random() - 0.5) * engine.current.shake; ctx.translate(dx, dy); engine.current.shake *= 0.9; if (engine.current.shake < 0.5) engine.current.shake = 0;
     }
@@ -1160,6 +1287,16 @@ const GameLogic: React.FC = () => {
         ctx.fillStyle = d.isOpen ? '#22c55e' : '#7f1d1d'; ctx.fillRect(d.x, d.y, d.width, d.height);
         ctx.strokeStyle = '#fff'; ctx.strokeRect(d.x, d.y, d.width, d.height);
     }
+
+    entities.current.cages.forEach(c => {
+         ctx.fillStyle = '#9ca3af'; ctx.fillRect(c.x, c.y, c.width, c.height);
+         ctx.strokeStyle = '#374151'; ctx.lineWidth = 4;
+         ctx.strokeRect(c.x, c.y, c.width, c.height);
+         ctx.beginPath(); ctx.moveTo(c.x + 10, c.y); ctx.lineTo(c.x + 10, c.y + c.height); ctx.stroke();
+         ctx.beginPath(); ctx.moveTo(c.x + 20, c.y); ctx.lineTo(c.x + 20, c.y + c.height); ctx.stroke();
+         ctx.beginPath(); ctx.moveTo(c.x + 30, c.y); ctx.lineTo(c.x + 30, c.y + c.height); ctx.stroke();
+         ctx.fillStyle = '#fff'; ctx.font = '10px monospace'; ctx.fillText(`${c.health}`, c.x + c.width/2, c.y - 10);
+    });
 
     entities.current.bushes.forEach(b => {
          ctx.save(); ctx.translate(b.x + b.width/2, b.y + b.height/2);
@@ -1338,6 +1475,18 @@ const GameLogic: React.FC = () => {
         let armAngle = p.facingRight ? p.aimAngle : Math.PI - p.aimAngle;
         ctx.rotate(armAngle);
         
+        // AIMING GUIDE (Trajectory)
+        if (p.isAiming || input.current.mouse.leftDown || input.current.touch.rightStick.active) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(20, 0); // Start from bow
+            ctx.lineTo(400, 0); // Extend out
+            ctx.stroke();
+            ctx.setLineDash([]); // Reset
+        }
+
         // Arm
         ctx.fillStyle = '#16a34a'; 
         ctx.fillRect(-4, -4, 16, 8);

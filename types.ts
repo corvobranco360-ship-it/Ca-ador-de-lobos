@@ -183,5 +183,6 @@ export interface GameState {
   enemiesKilled: number;
   enemiesRequired: number;
   isRaining: boolean; 
-  lightningTimer: number; 
+  lightningTimer: number;
+  floodLevel: number; // New property for Level 4
 }
